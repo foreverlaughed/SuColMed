@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  student
+  faculty
+  external
+  admin
+  doctor
+}
+
+enum TimeSlot {
+  morning
+  afternoon
+  evening
+}
+
+enum ScheduleStatus {
+  open
+  full
+  closed
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+}
+
+enum QueueStatus {
+  waiting
+  called
+  completed
+  missed
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  role         UserRole
+  studentId    String?   @unique
+  phone        String    @unique
+  email        String?   @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  appointments Appointment[]
+  doctor       Doctor?
+  reviews      Review[]
+
+  @@map("users")
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  location    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  doctors Doctor[]
+
+  @@map("departments")
+}
+
+model Doctor {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  departmentId String
+  title        String
+  specialties  Json?
+  avatar       String?
+  bio          String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  department   Department   @relation(fields: [departmentId], references: [id])
+  schedules    Schedule[]
+  appointments Appointment[]
+  medicalRecords MedicalRecord[]
+  reviews      Review[]
+
+  @@map("doctors")
+}
+
+model Schedule {
+  id              String         @id @default(uuid())
+  doctorId        String
+  date            DateTime       @db.Date
+  timeSlot        TimeSlot
+  maxPatients     Int            @default(20)
+  currentPatients Int            @default(0)
+  status          ScheduleStatus @default(open)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  doctor      Doctor        @relation(fields: [doctorId], references: [id])
+  appointments Appointment[]
+  queueNumbers QueueNumber[]
+
+  @@unique([doctorId, date, timeSlot])
+  @@map("schedules")
+}
+
+model Appointment {
+  id           String            @id @default(uuid())
+  userId       String
+  doctorId     String
+  scheduleId   String
+  status       AppointmentStatus @default(pending)
+  symptoms     String?
+  queueNumber  Int?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id])
+  doctor        Doctor        @relation(fields: [doctorId], references: [id])
+  schedule      Schedule      @relation(fields: [scheduleId], references: [id])
+  medicalRecord MedicalRecord?
+  review        Review?
+  queueNumberRecord QueueNumber?
+
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id            String   @id @default(uuid())
+  appointmentId String   @unique
+  doctorId      String
+  diagnosis     String
+  prescription  Json?
+  notes         String?
+  followUpDate  DateTime? @db.Date
+  createdAt     DateTime @default(now())
+
+  appointment Appointment       @relation(fields: [appointmentId], references: [id])
+  doctor      Doctor            @relation(fields: [doctorId], references: [id])
+  items       PrescriptionItem[]
+
+  @@map("medical_records")
+}
+
+model PrescriptionItem {
+  id              String  @id @default(uuid())
+  medicalRecordId String
+  medicineName    String
+  dosage          String
+  frequency       String
+  duration        String
+  notes           String?
+  medicineId      String?
+
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+  medicine      Medicine?     @relation(fields: [medicineId], references: [id])
+
+  @@map("prescription_items")
+}
+
+model Review {
+  id            String   @id @default(uuid())
+  appointmentId String   @unique
+  patientId     String
+  doctorId      String
+  rating        Int
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  patient     User        @relation(fields: [patientId], references: [id])
+  doctor      Doctor      @relation(fields: [doctorId], references: [id])
+
+  @@map("reviews")
+}
+
+model Medicine {
+  id        String   @id @default(uuid())
+  name      String
+  category  String
+  spec      String
+  unit      String
+  stock     Int      @default(0)
+  price     Decimal  @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items PrescriptionItem[]
+
+  @@map("medicines")
+}
+
+model QueueNumber {
+  id            String       @id @default(uuid())
+  scheduleId    String
+  appointmentId String?      @unique
+  number        Int
+  status        QueueStatus  @default(waiting)
+  calledAt      DateTime?
+  createdAt     DateTime     @default(now())
+
+  schedule    Schedule    @relation(fields: [scheduleId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@unique([scheduleId, number])
+  @@map("queue_numbers")
+}
